@@ -56,7 +56,7 @@ class MyNamespace(Namespace):
 
     def on_my_room_event(self, message):
         room = private_chats.query.filter_by(name=message['room']).first()
-        hashed_password = bcrypt.generate_password_hash(message['data']).decode('utf-8')
+        hashed_message = bcrypt.generate_password_hash(message['data']).decode('utf-8')
         msg = private_messages(chat_id=room.id,
          message=message['data'], user=current_user.username)
         db.session.add(msg)
