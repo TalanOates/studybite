@@ -35,7 +35,8 @@ def chat_greeting():
 @app.route("/chat/<room_id>", methods=['GET', 'POST'])#"/chat/<session_id>
 @login_required
 def chat(room_id):
-    messages = private_messages.query.filter_by(chat_id=room_id).all()
+    chat = private_chats.query.filter_by(name=room_id).first()
+    messages = private_messages.query.filter_by(chat_id=chat.id).all()
     username = current_user.username
     return render_template('chat.html', username=username, async_mode=socketio.async_mode, room_id=room_id, messages=messages)
 
