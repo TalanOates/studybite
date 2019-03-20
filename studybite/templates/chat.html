@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="row">
+    <div class="col-md-9">
+      <h1>Flask-SocketIO Test</h1>
+      <form id="send_room" method="POST" action='#'>
+          <input type="text" name="room_data" id="room_data" placeholder="Message">
+          <input type="submit" value="Send to Room">
+      </form>
+      <div id="log">
+        {% for msg in messages %}
+          {% if msg.message == 'USER CONNECTED' or msg.message == 'USER DISCONNECTED' %}
+          {% else %}
+            <br>{{ msg.user }}: {{ msg.message }}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="list-group">
+        <a class="list-group-item list-group-item">
+          <h4>Friends</h4>
+        </a>
+        <a href="friends" class="list-group-item list-group-item-action">Friend 1</a>
+        <a href="/chat" class="list-group-item list-group-item-action">Friend 2</a>
+        <a href="/requests" class="list-group-item list-group-item-action">Friend 3</a>
+        <a href="/search" class="list-group-item list-group-item-action">Friend 4</a>
+        <a href="/search" class="list-group-item list-group-item-action">Friend 5</a>
+        <a href="/search" class="list-group-item list-group-item-action">Friend 6</a>
+        <a href="/search" class="list-group-item list-group-item-action">Friend 7</a>
+        <a href="/search" class="list-group-item list-group-item-action">Friend 8</a>
+      </div>
+    </div>
+  </div>
+  <script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.5/socket.io.min.js"></script>
+  <script type="text/javascript" charset="utf-8">
+      $(document).ready(function() {
+          namespace = '/test';
+          var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port + namespace);
+          socket.on('connect', function() {
+              socket.emit('join', {room: '{{ room_id }}'});
+          });
+          socket.on('my_response', function(msg) {
+              $('#log').append('<br>' + $('<div/>').text(msg.name + ': ' + msg.data).html());
+          });
+          $('form#send_room').submit(function(event) {
+              socket.emit('my_room_event', {room: '{{ room_id }}', data: $('#room_data').val()});
+              return false;
+          });
+      });
+  </script>
+{% endblock content %}

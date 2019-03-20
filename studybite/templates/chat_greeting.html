@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="row">
+    <div class="col-md-9">
+      <h1>WELCOME TO THE CHAT</h1>
+      <br>
+      <h3>Start chating with...</h3>
+      <br>
+      <div class="content-section">
+        <form method="POST" action"">
+          {{ form.hidden_tag() }}
+          <fieldset>
+            <legend class="border-bottom mb-2">Search Users</legend>
+            <div class="form-group">
+              {{ form.name.label(class="form-control-label") }}
+              {{ form.name(class="form-control form-control") }}
+            </div>
+          </fieldset>
+          <div class="form-group">
+            {{ form.submit(class="btn btn-outline-info") }}
+          </div>
+        </form>
+      </div>
+      <h3>Or create a new room</h3>
+      <div class="content-section">
+      </div>
+      <div id="log"></div>
+    </div>
+    <div class="col-md-3">
+      <div class="list-group">
+        <a class="list-group-item list-group-item">
+          <h4>Friends</h4>
+        </a>
+        {% for fr in friends %}
+          <a href="{{ url_for('profile', user_id=fr.id) }}" class="list-group-item list-group-item-action">{{ fr.username }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endblock content %}
