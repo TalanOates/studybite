@@ -16,14 +16,6 @@ def home_redirect():
 
 @app.route("/home/<filter_id>")
 def home(filter_id):
-    if current_user.is_authenticated:
-        check = private_message_check()
-        if check > 0:
-            notification = str(check)+" messages"
-        elif check <= 0:
-            notification = "0 messages"
-    if not current_user.is_authenticated:
-        notification = "0 messages"
     if filter_id == "all":
         posts = Post.query.all()
     elif filter_id == "votes":
@@ -31,7 +23,7 @@ def home(filter_id):
         return render_template('home_upvotes.html', posts=posts)
     elif filter_id == "school_work" or "home_work" or "out_of_school" or "misc":
         posts = Post.query.filter_by(category=filter_id).all()
-    return render_template('home.html', posts=posts, notification=notification)
+    return render_template('home.html', posts=posts)
 
 @app.route("/vote/<post_id>")
 def upvote(post_id):
@@ -45,27 +37,6 @@ def upvote(post_id):
         db.session.add(vote)
         db.session.commit()
         return redirect(url_for('home', filter_id='all'))
-
-def private_message_check():
-    users_friends = current_user.friends.all()
-    for fr in users_friends:
-        users = [current_user.username,fr.username]
-        sorted_chat = sorted(users, reverse = False)
-        chat = private_chats.query.filter_by(name=sorted_chat[0]+'AND'+sorted_chat[1]).first()
-        ascending = private_messages.query.filter_by(chat_id=chat.id).all()
-        if ascending == []:
-            return(0)
-            break
-        u_dis = []
-        total = []
-        for x in ascending:
-            if x.message == current_user.username+"_DISCONNECTED":
-                u_dis.append(x.id)
-            total.append(x.id)
-        if total[-1] > u_dis[-1]:
-            return(total[-1] - u_dis[-1])
-        else:
-            return(0)
 
 @app.route("/chat_greeting", methods=['GET', 'POST'])
 @login_required
