@@ -4,43 +4,148 @@ import sys
 from PIL import Image
 from flask import render_template, url_for, flash, redirect, request, abort, session
 from studybite import app, db, bcrypt, socketio
-from studybite.forms import RegistrationForm, LoginForm, UpdateAccountForm, PostForm, RequestForm, ReplyForm
-from studybite.models import User, Post, Requests, private_chats, private_messages, post_replies
+from studybite.forms import RegForm, LogForm, PictureForm, PostForm, RequestForm, ReplyForm, GroupForm
+from studybite.models import User, Post, Requests, private_chats, private_messages, post_replies, Upvote, group_chats, group_messages
 from flask_login import login_user, current_user, logout_user, login_required
 from flask_socketio import Namespace, emit, join_room, leave_room, \
     close_room, rooms, disconnect
 
 @app.route("/")
-@app.route("/home")
-def home():
-    posts = Post.query.all()
-    return render_template('home.html', posts=posts)
+def home_redirect():
+    return redirect(url_for('home', filter_id='all'))
+
+@app.route("/home/<filter_id>")
+def home(filter_id):
+    if current_user.is_authenticated:
+        check = private_message_check()
+        if check > 0:
+            notification = str(check)+" messages"
+        elif check <= 0:
+            notification = "0 messages"
+    if not current_user.is_authenticated:
+        notification = "0 messages"
+    if filter_id == "all":
+        posts = Post.query.all()
+    elif filter_id == "votes":
+        posts = Post.query.all()
+        return render_template('home_upvotes.html', posts=posts)
+    elif filter_id == "school_work" or "home_work" or "out_of_school" or "misc":
+        posts = Post.query.filter_by(category=filter_id).all()
+    return render_template('home.html', posts=posts, notification=notification)
+
+@app.route("/vote/<post_id>")
+def upvote(post_id):
+    check = Upvote.query.filter_by(post=post_id,user=current_user.id).first()
+    if check:
+        return redirect(url_for('home', filter_id='all'))
+    else:
+        post = Post.query.filter_by(id=post_id).first()
+        post.votes += 1
+        vote = Upvote(post=post_id,user=current_user.id)
+        db.session.add(vote)
+        db.session.commit()
+        return redirect(url_for('home', filter_id='all'))
+
+def private_message_check():
+    users_friends = current_user.friends.all()
+    for fr in users_friends:
+        users = [current_user.username,fr.username]
+        sorted_chat = sorted(users, reverse = False)
+        chat = private_chats.query.filter_by(name=sorted_chat[0]+'AND'+sorted_chat[1]).first()
+        ascending = private_messages.query.filter_by(chat_id=chat.id).all()
+        if ascending == []:
+            return(0)
+            break
+        u_dis = []
+        total = []
+        for x in ascending:
+            if x.message == current_user.username+"_DISCONNECTED":
+                u_dis.append(x.id)
+            total.append(x.id)
+        if total[-1] > u_dis[-1]:
+            return(total[-1] - u_dis[-1])
+        else:
+            return(0)
 
 @app.route("/chat_greeting", methods=['GET', 'POST'])
 @login_required
 def chat_greeting():
     users_friends = current_user.friends.all()
     username = current_user.username
-    form = RequestForm()
-    if form.validate_on_submit():
-        friend_id = User.query.filter_by(username = form.name.data).first()
-        if friend_id:
-            users = sorted([current_user.username, form.name.data], reverse=False)
-            chat_users = private_chats.query.filter_by(user1=users[0],user2=users[1]).first()
-            return redirect(url_for('chat', room_id=chat_users.name))
-        else:
-            flash('please enter a friend'+'s name', 'danger')
-    return render_template('chat_greeting.html', username=username, async_mode=socketio.async_mode, form=form, friends=users_friends)
+    friend_dict = {}
+    chats = []
+    for fr in users_friends:
+        users = [current_user.username,fr.username]
+        chat = sorted(users, reverse = False)
+        chat_id = chat[0]+'AND'+chat[1]
+        friend_dict[fr.username] = chat_id
+    for user_groups in current_user.uic_id:
+        chats.append(group_chats.query.filter_by(id=user_groups.id).first())
+    return render_template('chat_greeting.html', username=username, async_mode=socketio.async_mode, friends=friend_dict, chats=chats)
 
-@app.route("/chat/<room_id>", methods=['GET', 'POST'])#"/chat/<session_id>
+@app.route("/p_chat/<room_id>", methods=['GET', 'POST'])
 @login_required
-def chat(room_id):
+def p_chat(room_id):
     chat = private_chats.query.filter_by(name=room_id).first()
-    messages = private_messages.query.filter_by(chat_id=chat.id).all()
-    username = current_user.username
+    if current_user.id == chat.user1 or chat.user2:
+        messages = private_messages.query.filter_by(chat_id=chat.id).all()
+        username = current_user.username
+    else:
+        flash('this is a private chat', 'danger')
+        return redirect(url_for('chat_greeting'))
     return render_template('chat.html', username=username, async_mode=socketio.async_mode, room_id=room_id, messages=messages)
 
-class MyNamespace(Namespace):
+@app.route("/g_chat/<room_id>", methods=['GET', 'POST'])
+@login_required
+def g_chat(room_id):
+    verified = False
+    form = RequestForm()
+    chat = group_chats.query.filter_by(name=room_id).first()
+    for x in current_user.uic_id:
+        if x.name == room_id:
+            verified = True
+    if verified == True:
+        messages = group_messages.query.filter_by(chat_id=chat.id).all()
+        username = current_user.username
+        if form.validate_on_submit():
+            for y in current_user.friends.all():
+                if form.name.data == y.username:
+                    friend = User.query.filter_by(username=y.username).first()
+                    group = group_chats.query.filter_by(name=room_id).first()
+                    friend.uic_id.append(group)
+                    db.session.commit()
+                    flash('you added the user', 'success')
+                    return redirect(url_for('g_chat', room_id=room_id))
+                else:
+                    flash('enter a friends name', 'danger')
+                    return redirect(url_for('g_chat'))
+    elif verified == False:
+        flash('you need an invite', 'danger')
+        return redirect(url_for('chat_greeting'))
+    return render_template('group_chat.html', room_id=room_id, username=username, async_mode=socketio.async_mode, messages=messages, form=form)
+
+@app.route("/create_group", methods=['GET', 'POST'])
+def create_group():
+    not_allowed = '!"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~ '
+    passed = True
+    form = GroupForm()
+    if form.validate_on_submit():
+        for x in range(0, len(form.name.data)):
+            if form.name.data[x] in not_allowed:
+                passed = False
+        if passed == False:
+            flash('request already sent', 'danger')
+            return redirect(url_for('create_group'))
+        elif passed == True:
+            group = group_chats(name=form.name.data)
+            db.session.add(group)
+            group.chat_users.append(current_user)
+            db.session.commit()
+            flash('group chat created', 'success')
+            return redirect(url_for('chat_greeting'))
+    return render_template('create_group.html', form=form)
+
+class PrivateApp(Namespace):
     def on_my_event(self, message):
         emit('my_response',
              {'data': message['data']})
@@ -49,7 +154,7 @@ class MyNamespace(Namespace):
         join_room(message['room'])
         room = private_chats.query.filter_by(name=message['room']).first()
         msg = private_messages(chat_id=room.id,
-         message='USER CONNECTED', server_event='C', user=current_user.username)
+         message=current_user.username+'_CONNECTED', server_event='C', user=current_user.username)
         db.session.add(msg)
         db.session.commit()
         emit('my_response',
@@ -57,8 +162,42 @@ class MyNamespace(Namespace):
 
     def on_my_room_event(self, message):
         room = private_chats.query.filter_by(name=message['room']).first()
-        hashed_message = bcrypt.generate_password_hash(message['data']).decode('utf-8')
         msg = private_messages(chat_id=room.id,
+         message=message['data'], user=current_user.username)
+        db.session.add(msg)
+        db.session.commit()
+        emit('my_response',
+             {'data': message['data'], 'name': current_user.username},
+             room=message['room'])
+
+    def on_disconnect(self):
+        whole = rooms()
+        room = private_chats.query.filter_by(name=whole[1]).first()
+        msg = private_messages(chat_id=room.id,
+         message=current_user.username+'_DISCONNECTED', server_event='D', user=current_user.username)
+        db.session.add(msg)
+        db.session.commit()
+
+socketio.on_namespace(PrivateApp('/privatechat'))
+
+class GroupApp(Namespace):
+    def on_my_event(self, message):
+        emit('my_response',
+             {'data': message['data']})
+
+    def on_join(self, message):
+        join_room(message['room'])
+        room = group_chats.query.filter_by(name=message['room']).first()
+        msg = group_messages(chat_id=room.id,
+         message=current_user.username+'_CONNECTED', server_event='C', user=current_user.username)
+        db.session.add(msg)
+        db.session.commit()
+        emit('my_response',
+             {'data': 'USER CONNECTED', 'name': current_user.username})
+
+    def on_my_room_event(self, message):
+        room = group_chats.query.filter_by(name=message['room']).first()
+        msg = group_messages(chat_id=room.id,
          message=message['data'], user=current_user.username)
         db.session.add(msg)
         db.session.commit()
@@ -69,17 +208,18 @@ class MyNamespace(Namespace):
     def on_disconnect(self):
         print('Client disconnected', request.sid)
         whole = rooms()
-        msg = private_messages(chat_id=whole[1],
-         message='USER DISCONNECTED', server_event='D', user=current_user.username)
+        room = private_chats.query.filter_by(name=whole[1]).first()
+        msg = group_messages(chat_id=whole[1],
+         message=current_user.username+'_DISCONNECTED', server_event='D', user=current_user.username)
         db.session.add(msg)
         db.session.commit()
 
-socketio.on_namespace(MyNamespace('/test'))
+socketio.on_namespace(GroupApp('/groupchat'))
 
 @app.route("/profile/<user_id>")
 def profile(user_id):
     posts = Post.query.filter_by(user_id=user_id)
-    return render_template('home.html', posts=posts)
+    return render_template('user_profile.html', posts=posts)
 
 @app.route("/search", methods=['GET', 'POST'])
 @login_required
@@ -120,11 +260,11 @@ def requests():
 @app.route("/register", methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('home'))
-    form = RegistrationForm()
+        return redirect(url_for('home', filter_id='all'))
+    form = RegForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username=form.username.data, email=form.email.data, password=hashed_password)
+        user = User(username=form.username.data, password=hashed_password)
         db.session.add(user)
         db.session.commit()
         flash('Your account has been created! You are now able to log in', 'success')
@@ -135,69 +275,66 @@ def register():
 @app.route("/login", methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('home'))
-    form = LoginForm()
+        return redirect(url_for('home', filter_id='all'))
+    form = LogForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+        user = User.query.filter_by(username=form.username.data).first()
         if user and bcrypt.check_password_hash(user.password, form.password.data):
             login_user(user, remember=form.remember.data)
             next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('home'))
+            return redirect(next_page) if next_page else redirect(url_for('home', filter_id='all'))
         else:
-            flash('Login Unsuccessful. Please check email and password', 'danger')
+            flash('check username and/or password', 'danger')
     return render_template('login.html', title='Login', form=form)
 
 
 @app.route("/logout")
 def logout():
     logout_user()
-    return redirect(url_for('home'))
+    return redirect(url_for('home', filter_id='all'))
 
 def save_picture(form_picture):
     random_hex = secrets.token_hex(8)
-    _, f_ext = os.path.splitext(form_picture.filename)
-    picture_fn = random_hex + f_ext
-    picture_path = os.path.join(app.root_path, 'static/profile_pics', picture_fn)
+    file_name, file_extension = os.path.splitext(form_picture.filename)
+    picture_name = random_hex + file_extension
+    picture_path = os.path.join(app.root_path, 'static/profile_pics', picture_name)
 
-    output_size = (125, 125)
+    size = (125, 125)
     i = Image.open(form_picture)
-    i.thumbnail(output_size)
+    i.thumbnail(size)
     i.save(picture_path)
 
-    return picture_fn
+    return picture_name
 
-@app.route("/account", methods=['GET', 'POST'])
+@app.route("/picture", methods=['GET', 'POST'])
 @login_required
-def account():
-    form = UpdateAccountForm()
+def picture():
+    form = PictureForm()
     if form.validate_on_submit():
         if form.picture.data:
             picture_file = save_picture(form.picture.data)
             current_user.image_file = picture_file
-        current_user.username = form.username.data
-        current_user.email = form.email.data
         db.session.commit()
-        flash('Your account has been updated!', 'success')
-        return redirect(url_for('account'))
-    elif request.method == 'GET':
-        form.username.data = current_user.username
-        form.email.data = current_user.email
+        flash('account has been updated', 'success')
+        return redirect(url_for('picture'))
     image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
-    return render_template('account.html', title='Account',
+    return render_template('picture.html', title='Account',
                            image_file=image_file, form=form)
 
-@app.route("/post/new", methods=['GET', 'POST'])
+@app.route("/post/new", methods=['GET', 'post'])
 @login_required
 def new_post():
     form = PostForm()
     if form.validate_on_submit():
-        post = Post(title=form.title.data, content=form.content.data, author=current_user)
+        post = Post(title=form.title.data, content=form.content.data, author=current_user, category=form.category.data)
         db.session.add(post)
         db.session.commit()
-        flash('Your post has been created!', 'success')
-        return redirect(url_for('home'))
-    return render_template('create_post.html', title='New Post',
-                           form=form, legend='New Post')
+        flash('posted', 'success')
+        return redirect(url_for('home', filter_id='all'))
+    else:
+        print(form.errors)
+    return render_template('create_post.html', title='New post',
+                           form=form, legend='New post')
 
 @app.route("/post/<int:post_id>")
 def post(post_id):
@@ -244,7 +381,7 @@ def delete_post(post_id):
     db.session.delete(post)
     db.session.commit()
     flash('Your post has been deleted!', 'success')
-    return redirect(url_for('home'))
+    return redirect(url_for('home', filter_id='all'))
 
 @app.route("/request/<int:request_id>/delete", methods=['POST'])
 def delete_request(request_id):
