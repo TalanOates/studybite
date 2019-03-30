@@ -35,7 +35,11 @@
               <small class="text-muted">at : ({{ post.date_posted.strftime('%d-%m-%Y') }})</small>
               <a class="btn btn-success btn-sm mt-1 mb-1 ml-2" href="{{ url_for('upvote', post_id=post.id) }}">{{ post.votes }}</a>
             </div>
-            <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
+            {% if post.poll == True %}
+              <h2><a class="article-title" href="{{ url_for('poll', room_id=post.id) }}">{{ post.title }} (POLL)</a></h2>
+            {% else %}
+              <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
+            {% endif %}
             <p class="article-content">{{ post.content }}</p>
           </div>
         </article>

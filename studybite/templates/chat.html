@@ -30,7 +30,7 @@
               $('#log').append('<br>' + $('<div/>').text(msg.name + ': ' + msg.data).html());
           });
           $('form#send_room').submit(function(event) {
-              socket.emit('my_room_event', {room: '{{ room_id }}', data: $('#room_data').val()});
+              socket.emit('send', {room: '{{ room_id }}', data: $('#room_data').val()});
               return false;
           });
       });

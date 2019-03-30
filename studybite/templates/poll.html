@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-md-9">
+    <article class="media content-section">
+      <h1>{{ post.title }}</h1>
+    </article>
+    {% for but in button %}
+      <form id="{{ loop.index }}" method="POST" action='#'>
+          <input type="submit" value="{{ but.topic }}" id="button{{ loop.index }}">
+          <h3 id="inc{{ loop.index }}">{{ but.value }}</h3>
+          <h6 id="topic{{ loop.index }}">{{ but.topic }}</h6>
+      </form>
+    {% endfor %}
+    <br>
+    <article class="media content-section">
+      <div id="chart"></div>
+    </article>
+  </div>
+</div>
+<script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.5/socket.io.min.js"></script>
+<script type="text/javascript" src="https://www.google.com/jsapi"></script>
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    $(document).ready(function() {
+        var number = 0
+        namespace = '/poll';
+        var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port + namespace);
+        socket.on('connect', function() {
+            load_chart()
+            socket.emit('join', {room: '{{ room_id }}'});
+        });
+        socket.on('response', function(msg) {
+            load_chart()
+            $("#inc"+msg.number).text(msg.data);
+        });
+        function load_chart(event) {
+          google.charts.load('current', {'packages':['corechart']});
+          google.charts.setOnLoadCallback(drawChart);
+          function drawChart() {
+            var row1 = parseInt($("#inc1").text());
+            var row2 = parseInt($("#inc2").text());
+            var row3 = parseInt($("#inc3").text());
+            var row4 = parseInt($("#inc4").text());
+            var topic1 = $("#topic1").text();
+            var topic2 = $("#topic2").text();
+            var topic3 = $("#topic3").text();
+            var topic4 = $("#topic4").text();
+            var data = google.visualization.arrayToDataTable([
+            ['Topic', 'Votes'],
+            [topic1, row1],
+            [topic2, row2],
+            [topic3, row3],
+            [topic4, row4],
+          ]);
+            var options = {'width':550, 'height':400};
+            var chart = new google.visualization.PieChart(document.getElementById('chart'));
+            chart.draw(data, options);
+          }
+        }
+        $('form#1').submit(function(event) {
+            number = number + 1
+            socket.emit('increment1', {room: '{{ room_id }}', value: number, number: 1});
+            return false;
+        });
+        $('form#2').submit(function(event) {
+            number = number + 1
+            socket.emit('increment2', {room: '{{ room_id }}', value: number, number: 1});
+            return false;
+        });
+        $('form#3').submit(function(event) {
+            number = number + 1
+            socket.emit('increment3', {room: '{{ room_id }}', value: number, number: 1});
+            return false;
+        });
+        $('form#4').submit(function(event) {
+            number = number + 1
+            socket.emit('increment4', {room: '{{ room_id }}', value: number, number: 1});
+            return false;
+        });
+    });
+</script>
+<style>
+    #chart_id {
+        min-height: 400px;
+    }
+</style>
+{% endblock content %}
