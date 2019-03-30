@@ -8,11 +8,16 @@
     {% for but in button %}
       <form id="{{ loop.index }}" method="POST" action='#'>
           <input type="submit" value="{{ but.topic }}" id="button{{ loop.index }}">
-          <h3 id="inc{{ loop.index }}">{{ but.value }}</h3>
-          <h6 id="topic{{ loop.index }}">{{ but.topic }}</h6>
+          <div class="row">
+            <div class="col-md-3 mt-3">
+              <p id="topic{{ loop.index }}">{{ but.topic }}</p>
+            </div>
+            <div class="col-md-1 mb-2">
+              <h3 id="inc{{ loop.index }}">{{ but.value }}</h3>
+            </div>
+          </div>
       </form>
     {% endfor %}
-    <br>
     <article class="media content-section">
       <div id="chart"></div>
     </article>
