@@ -34,12 +34,18 @@ class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     date_posted = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    content = db.Column(db.Text, nullable=False)
+    content = db.Column(db.Text, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     replies = db.relationship('post_replies', backref='replies', lazy=True)
     votes = db.Column(db.Integer, nullable=True, default=0)
     category = db.Column(db.String(10), nullable=False)
+    poll = db.Column(db.Boolean, nullable=True)
 
+class poll_data(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    post = db.Column(db.String(100), nullable=False)
+    topic = db.Column(db.String(100), nullable=False)
+    value = db.Column(db.Integer, default=0)
 
 class post_replies(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -29,6 +29,16 @@ class PictureForm(FlaskForm):
     picture = FileField('Files allowed : jpg,png', validators=[FileAllowed(['jpg', 'png'])])
     submit = SubmitField('Update')
 
+class PollForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired()])
+    submit = SubmitField('Post')
+    topic1 = StringField('First Vote Topic', validators=[DataRequired()])
+    topic2 = StringField('second Vote Topic', validators=[DataRequired()])
+    topic3 = StringField('Third Vote Topic')
+    topic4 = StringField('Forth Vote Topic')
+    category = SelectField('category', choices=[("school_work", "School Work"),
+     ("home_work", "Home work"), ("out_of_school", "Out of school"), ("Misc", "Misc")])
+
 class PostForm(FlaskForm):
     title = StringField('Title', validators=[DataRequired()])
     content = TextAreaField('Content', validators=[DataRequired()])

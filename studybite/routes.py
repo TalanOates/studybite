@@ -4,11 +4,12 @@ import sys
 from PIL import Image
 from flask import render_template, url_for, flash, redirect, request, abort, session
 from studybite import app, db, bcrypt, socketio
-from studybite.forms import RegForm, LogForm, PictureForm, PostForm, RequestForm, ReplyForm, GroupForm
-from studybite.models import User, Post, Requests, private_chats, private_messages, post_replies, Upvote, group_chats, group_messages
+from studybite.forms import RegForm, LogForm, PictureForm, PostForm, RequestForm, ReplyForm, GroupForm, PollForm
+from studybite.models import User, Post, Requests, private_chats, private_messages, post_replies, Upvote, group_chats, group_messages, poll_data
 from flask_login import login_user, current_user, logout_user, login_required
 from flask_socketio import Namespace, emit, join_room, leave_room, \
     close_room, rooms, disconnect
+from werkzeug import secure_filename
 
 @app.route("/")
 def home_redirect():
@@ -16,6 +17,14 @@ def home_redirect():
 
 @app.route("/home/<filter_id>")
 def home(filter_id):
+    # if current_user.is_authenticated:
+    #     check = private_message_check()
+    #     if check > 0:
+    #         notification = str(check)+" messages"
+    #     elif check <= 0:
+    #         notification = "0 messages"
+    # if not current_user.is_authenticated:
+    #     notification = "0 messages"
     if filter_id == "all":
         posts = Post.query.all()
     elif filter_id == "votes":
@@ -23,20 +32,44 @@ def home(filter_id):
         return render_template('home_upvotes.html', posts=posts)
     elif filter_id == "school_work" or "home_work" or "out_of_school" or "misc":
         posts = Post.query.filter_by(category=filter_id).all()
-    return render_template('home.html', posts=posts)
+    return render_template('home.html', posts=posts) #notification=notification)
 
 @app.route("/vote/<post_id>")
+#handling of the votes, after a user presses upvote on a post
 def upvote(post_id):
     check = Upvote.query.filter_by(post=post_id,user=current_user.id).first()
     if check:
         return redirect(url_for('home', filter_id='all'))
     else:
+        #finds the post and increases the votes field in the Post table
         post = Post.query.filter_by(id=post_id).first()
         post.votes += 1
+        #updates the upvote's table with the post that is being upvoted and by who
         vote = Upvote(post=post_id,user=current_user.id)
         db.session.add(vote)
         db.session.commit()
         return redirect(url_for('home', filter_id='all'))
+
+# def private_message_check():
+#     users_friends = current_user.friends.all()
+#     for fr in users_friends:
+#         users = [current_user.username,fr.username]
+#         sorted_chat = sorted(users, reverse = False)
+#         chat = private_chats.query.filter_by(name=sorted_chat[0]+'AND'+sorted_chat[1]).first()
+#         ascending = private_messages.query.filter_by(chat_id=chat.id).all()
+#         if ascending == []:
+#             return(0)
+#             break
+#         u_dis = []
+#         total = []
+#         for x in ascending:
+#             if x.message == current_user.username+"_DISCONNECTED":
+#                 u_dis.append(x.id)
+#             total.append(x.id)
+#         if total[-1] > u_dis[-1]:
+#             return(total[-1] - u_dis[-1])
+#         else:
+#             return(0)
 
 @app.route("/chat_greeting", methods=['GET', 'POST'])
 @login_required
@@ -116,6 +149,111 @@ def create_group():
             return redirect(url_for('chat_greeting'))
     return render_template('create_group.html', form=form)
 
+@app.route("/poll/new", methods=['GET', 'post'])
+def create_poll():
+    form = PollForm()
+    topics = 2
+    if form.validate_on_submit():
+        if form.topic3.data != "":
+            topics += 1
+        if form.topic4.data != "":
+            topics +=1
+        if topics == 2:
+            post = Post(title=form.title.data, category=form.category.data, author=current_user, poll=True)
+            db.session.add(post)
+            db.session.commit()
+            post_search = Post.query.filter_by(title=form.title.data).first()
+            topic_1 = poll_data(post=post_search.id, topic=form.topic1.data)
+            topic_2 = poll_data(post=post_search.id, topic=form.topic2.data)
+            db.session.add(topic_1)
+            db.session.add(topic_2)
+            db.session.commit()
+        if topics == 3:
+            post = Post(title=form.title.data, category=form.category.data, author=current_user, poll=True)
+            db.session.add(post)
+            db.session.commit()
+            post_search = Post.query.filter_by(title=form.title.data).first()
+            topic_1 = poll_data(post=post_search.id, topic=form.topic1.data)
+            topic_2 = poll_data(post=post_search.id, topic=form.topic2.data)
+            topic_3 = poll_data(post=post_search.id, topic=form.topic3.data)
+            db.session.add(topic_1)
+            db.session.add(topic_2)
+            db.session.add(topic_3)
+            db.session.commit()
+        if topics == 4:
+            post = Post(title=form.title.data, category=form.category.data, author=current_user, poll=True)
+            db.session.add(post)
+            db.session.commit()
+            post_search = Post.query.filter_by(title=form.title.data).first()
+            topic_1 = poll_data(post=post_search.id, topic=form.topic1.data)
+            topic_2 = poll_data(post=post_search.id, topic=form.topic2.data)
+            topic_3 = poll_data(post=post_search.id, topic=form.topic3.data)
+            topic_4 = poll_data(post=post_search.id, topic=form.topic4.data)
+            db.session.add(topic_1)
+            db.session.add(topic_2)
+            db.session.add(topic_3)
+            db.session.add(topic_4)
+            db.session.commit()
+        flash('poll created', 'success')
+        return redirect(url_for('home', filter_id='all'))
+    else:
+        pass
+    return render_template('create_poll.html',form=form)
+
+@app.route("/poll/<room_id>", methods=['GET', 'POST'])
+@login_required
+def poll(room_id):
+    post = Post.query.filter_by(id=room_id).first()
+    button = poll_data.query.filter_by(post=room_id).all()
+    p_data = []
+    for x in range(0, len(button)):
+        temp = (button[x].topic, button[x].value)
+        p_data.append(temp)
+    return render_template('poll.html', username=current_user.username, async_mode=socketio.async_mode, room_id=room_id,
+    p_data=p_data, post=post, button=button)
+
+class PollApp(Namespace):
+    def on_join(self, message):
+        join_room(message['room'])
+
+    def on_increment1(self, message):
+        search = poll_data.query.filter_by(post=message['room']).all()
+        search[0].value += 1
+        db.session.commit()
+        updated = poll_data.query.filter_by(post=message['room']).all()
+        emit('response',
+             {'data': str(updated[0].value), 'number': 1},
+             room=message['room'])
+
+    def on_increment2(self, message):
+        search = poll_data.query.filter_by(post=message['room']).all()
+        search[1].value += 1
+        db.session.commit()
+        updated = poll_data.query.filter_by(post=message['room']).all()
+        emit('response',
+             {'data': str(updated[1].value), 'number': 2},
+             room=message['room'])
+
+    def on_increment3(self, message):
+        search = poll_data.query.filter_by(post=message['room']).all()
+        search[2].value += 1
+        db.session.commit()
+        updated = poll_data.query.filter_by(post=message['room']).all()
+        emit('response',
+             {'data': str(updated[2].value), 'number': 3},
+             room=message['room'])
+
+    def on_increment4(self, message):
+        search = poll_data.query.filter_by(post=message['room']).all()
+        search[3].value += 1
+        db.session.commit()
+        updated = poll_data.query.filter_by(post=message['room']).all()
+        emit('response',
+             {'data': str(updated[3].value), 'number': 4},
+             room=message['room'])
+
+socketio.on_namespace(PollApp('/poll'))
+
 class PrivateApp(Namespace):
     def on_my_event(self, message):
         emit('my_response',
@@ -131,7 +269,7 @@ class PrivateApp(Namespace):
         emit('my_response',
              {'data': 'USER CONNECTED', 'name': current_user.username})
 
-    def on_my_room_event(self, message):
+    def on_send(self, message):
         room = private_chats.query.filter_by(name=message['room']).first()
         msg = private_messages(chat_id=room.id,
          message=message['data'], user=current_user.username)
@@ -166,7 +304,7 @@ class GroupApp(Namespace):
         emit('my_response',
              {'data': 'USER CONNECTED', 'name': current_user.username})
 
-    def on_my_room_event(self, message):
+    def on_send(self, message):
         room = group_chats.query.filter_by(name=message['room']).first()
         msg = group_messages(chat_id=room.id,
          message=message['data'], user=current_user.username)
@@ -265,16 +403,14 @@ def logout():
     return redirect(url_for('home', filter_id='all'))
 
 def save_picture(form_picture):
-    random_hex = secrets.token_hex(8)
+    random = secrets.token_hex(8)
     file_name, file_extension = os.path.splitext(form_picture.filename)
-    picture_name = random_hex + file_extension
+    picture_name = random + file_extension
     picture_path = os.path.join(app.root_path, 'static/profile_pics', picture_name)
-
     size = (125, 125)
     i = Image.open(form_picture)
     i.thumbnail(size)
     i.save(picture_path)
-
     return picture_name
 
 @app.route("/picture", methods=['GET', 'POST'])
@@ -335,7 +471,7 @@ def update_post(post_id):
         post.title = form.title.data
         post.content = form.content.data
         db.session.commit()
-        flash('Your post has been updated!', 'success')
+        flash('Updated', 'success')
         return redirect(url_for('post', post_id=post.id))
     elif request.method == 'GET':
         form.title.data = post.title
