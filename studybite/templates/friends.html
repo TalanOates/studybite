@@ -1,8 +1,0 @@
-{% extends "layout.html" %}
-{% block content %}
-  {% for fr in friends %}
-    <div class="content-section">
-      <h4><a class="article-title" href="{{ url_for('profile', user_id=fr.id) }}">{{ fr.username }}</a></h4>
-    </div>
-  {% endfor %}
-{% endblock content %}
